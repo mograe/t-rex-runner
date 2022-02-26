@@ -189,11 +189,11 @@
      * Sound FX. Reference to the ID of the audio tag on interstitial page.
      * @enum {string}
      */
-    Runner.sounds = {
-        BUTTON_PRESS: 'offline-sound-press',
-        HIT: 'offline-sound-hit',
-        SCORE: 'offline-sound-reached'
-    };
+    // Runner.sounds = {
+    //     BUTTON_PRESS: 'offline-sound-press',
+    //     HIT: 'offline-sound-hit',
+    //     SCORE: 'offline-sound-reached'
+    // };
 
 
     /**
@@ -306,26 +306,26 @@
         /**
          * Load and decode base 64 encoded sounds.
          */
-        loadSounds: function () {
-            if (!IS_IOS) {
-                this.audioContext = new AudioContext();
+        // loadSounds: function () {
+        //     if (!IS_IOS) {
+        //         this.audioContext = new AudioContext();
 
-                var resourceTemplate =
-                    document.getElementById(this.config.RESOURCE_TEMPLATE_ID).content;
+        //         var resourceTemplate =
+        //             document.getElementById(this.config.RESOURCE_TEMPLATE_ID).content;
 
-                for (var sound in Runner.sounds) {
-                    var soundSrc =
-                        resourceTemplate.getElementById(Runner.sounds[sound]).src;
-                    soundSrc = soundSrc.substr(soundSrc.indexOf(',') + 1);
-                    var buffer = decodeBase64ToArrayBuffer(soundSrc);
+        //         for (var sound in Runner.sounds) {
+        //             var soundSrc =
+        //                 resourceTemplate.getElementById(Runner.sounds[sound]).src;
+        //             soundSrc = soundSrc.substr(soundSrc.indexOf(',') + 1);
+        //             var buffer = decodeBase64ToArrayBuffer(soundSrc);
 
-                    // Async, so no guarantee of order in array.
-                    this.audioContext.decodeAudioData(buffer, function (index, audioData) {
-                        this.soundFx[index] = audioData;
-                    }.bind(this, sound));
-                }
-            }
-        },
+        //             // Async, so no guarantee of order in array.
+        //             this.audioContext.decodeAudioData(buffer, function (index, audioData) {
+        //                 this.soundFx[index] = audioData;
+        //             }.bind(this, sound));
+        //         }
+        //     }
+        // },
 
         /**
          * Sets the game speed. Adjust the speed accordingly if on a smaller screen.
@@ -673,7 +673,7 @@
                 if (!this.crashed && (Runner.keycodes.JUMP[e.keyCode] ||
                     e.type == Runner.events.TOUCHSTART)) {
                     if (!this.playing) {
-                        this.loadSounds();
+                    //    this.loadSounds();
                         this.playing = true;
                         this.update();
                         if (window.errorPageController) {
