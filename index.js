@@ -168,7 +168,8 @@
             RESTART: { x: 2, y: 2 },
             TEXT_SPRITE: { x: 655, y: 2 },
             TREX: { x: 848, y: 2 },
-            STAR: { x: 645, y: 2 }
+            STAR: { x: 645, y: 2 },
+            APPLE: {x: 1248, y: 2}
         },
         HDPI: {
             CACTUS_LARGE: { x: 652, y: 2 },
@@ -180,7 +181,8 @@
             RESTART: { x: 2, y: 2 },
             TEXT_SPRITE: { x: 1294, y: 2 },
             TREX: { x: 1678, y: 2 },
-            STAR: { x: 1276, y: 2 }
+            STAR: { x: 1276, y: 2 },
+            APPLE: {x: 2486, y: 2}
         }
     };
 
@@ -1273,7 +1275,7 @@
      * Maximum obstacle grouping count.
      * @const
      */
-    Obstacle.MAX_OBSTACLE_LENGTH = 3,
+    Obstacle.MAX_OBSTACLE_LENGTH = 1,
 
 
         Obstacle.prototype = {
@@ -1476,7 +1478,22 @@
             numFrames: 2,
             frameRate: 1000 / 6,
             speedOffset: .8
+        },
+        {
+            type: 'APPLE',
+            width: 25,
+            height: 25,
+            yPos: 105,
+            multipleSpeed: 4,
+            minGap: 120,
+            minSpeed: 0,
+            collisionBoxes: [
+                new CollisionBox(0, 7, 5, 27),
+                new CollisionBox(4, 0, 6, 34),
+                new CollisionBox(10, 4, 7, 14)
+            ]
         }
+
     ];
 
 
