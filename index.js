@@ -33,9 +33,13 @@
         this.tRex = null;
 
         this.distanceMeter = null;
+        this.lifeScore = null;
         this.distanceRan = 0;
 
         this.highestScore = 0;
+
+        this.lifes = 3;
+        this.apples = 0;
 
         this.time = 0;
         this.runningTime = 0;
@@ -47,7 +51,7 @@
         this.activated = false; // Whether the easter egg has been activated.
         this.playing = false; // Whether the game is currently in play state.
         this.crashed = false;
-        this.paused = false;
+        this.paused = false; 
         this.inverted = false;
         this.invertTimer = 0;
         this.resizeTimerId_ = null;
@@ -123,7 +127,8 @@
         MOBILE_SPEED_COEFFICIENT: 1.2,
         RESOURCE_TEMPLATE_ID: 'audio-resources',
         SPEED: 6,
-        SPEED_DROP_COEFFICIENT: 3
+        SPEED_DROP_COEFFICIENT: 3,
+        BEGIN_LIFES: 3
     };
 
 
@@ -374,8 +379,12 @@
                 this.config.GAP_COEFFICIENT);
 
             // Distance meter
-            this.distanceMeter = new DistanceMeter(this.canvas,
+            this.lifeScore = new LifeScore(this.canvas,
                 this.spriteDef.TEXT_SPRITE, this.dimensions.WIDTH);
+
+            this.distanceMeter = new DistanceMeter(this.canvas, this.spriteDef.TEXT_SPRITE, this.dimensions.WIDTH);
+
+            this.appleScore = new AppleScore(this.canvas, this.spriteDef.TEXT_SPRITE, this.dimensions.WIDTH);
 
             // Draw t-rex
             this.tRex = new Trex(this.canvas, this.spriteDef.TREX);
@@ -433,6 +442,8 @@
                 Runner.updateCanvasScaling(this.canvas);
 
                 this.distanceMeter.calcXPos(this.dimensions.WIDTH);
+                this.lifeScore.calcXPos(this.dimensions.WIDTH);
+                //this.appleScore.calcXpos(this.dimensions.WIDTH);
                 this.clearCanvas();
                 this.horizon.update(0, 0, true);
                 this.tRex.update(0);
@@ -538,6 +549,8 @@
 
                 this.runningTime += deltaTime;
                 var hasObstacles = this.runningTime > this.config.CLEAR_TIME;
+                var hasBonuses = this.runningTime > this.config.CLEAR_TIME;
+
 
                 // First jump triggers the intro.
                 if (this.tRex.jumpCount == 1 && !this.playingIntro) {
@@ -546,29 +559,55 @@
 
                 // The horizon doesn't move until the intro is over.
                 if (this.playingIntro) {
-                    this.horizon.update(0, this.currentSpeed, hasObstacles);
+                    this.horizon.update(0, this.currentSpeed, hasObstacles, hasBonuses);
                 } else {
                     deltaTime = !this.activated ? 0 : deltaTime;
-                    this.horizon.update(deltaTime, this.currentSpeed, hasObstacles,
+                    this.horizon.update(deltaTime, this.currentSpeed, hasObstacles, hasBonuses,
                         this.inverted);
                 }
 
-                // Check for collisions.
-                var collision = hasObstacles &&
-                    checkForCollision(this.horizon.obstacles[0], this.tRex);
+                if(this.horizon.obstacles.length > 0){
+                    var collisionObstacles = hasObstacles &&
+                        checkForCollision(this.horizon.obstacles[0], this.tRex);
 
-                if (!collision) {
-                    this.distanceRan += this.currentSpeed * deltaTime / this.msPerFrame;
+                    if (!collisionObstacles) {
+                        this.distanceRan += this.currentSpeed * deltaTime / this.msPerFrame;
 
-                    if (this.currentSpeed < this.config.MAX_SPEED) {
-                        this.currentSpeed += this.config.ACCELERATION;
+                        if (this.currentSpeed < this.config.MAX_SPEED) {
+                            this.currentSpeed += this.config.ACCELERATION;
+                        }
+                    } else if(this.lifes > 0) {
+                        this.lifes--;
+                        this.minusLife();
                     }
-                } else {
-                    this.gameOver();
+                    else{
+                        this.gameOver();
+                    }
                 }
+                if (this.horizon.bonuses.length > 0){
+                    var collisionBonuses = hasObstacles && checkForCollision(this.horizon.bonuses[0], this.tRex);
+                    if(collisionBonuses) {
+                        this.horizon.bonuses.shift()
+                        this.apples++;
+                        if(this.apples == 3){
+                            this.apples = 0;
+                            this.lifes++;
+                        }
+                    }
+                }
+
+                var lastBonus = this.horizon.bonuses[this.horizon.bonuses.length-1]
+                var lastObstacle = this.horizon.obstacles[this.horizon.obstacles.length-1]
+                if(lastBonus && lastObstacle)
+                    if(checkForCollisionObstacleAndBonus(lastBonus,lastObstacle,this.canvasCtx)){
+                        this.horizon.bonuses.pop();
+                    }
 
                 var playAchievementSound = this.distanceMeter.update(deltaTime,
                     Math.ceil(this.distanceRan));
+                
+                this.lifeScore.update(this.lifes);
+                this.appleScore.update(this.apples);
 
                 if (playAchievementSound) {
                     this.playSound(this.soundFx.SCORE);
@@ -829,12 +868,37 @@
                 this.containerEl.classList.remove(Runner.classes.CRASHED);
                 this.clearCanvas();
                 this.distanceMeter.reset(this.highestScore);
+                this.lifes = this.config.BEGIN_LIFES;
                 this.horizon.reset();
                 this.tRex.reset();
                 this.playSound(this.soundFx.BUTTON_PRESS);
                 this.invert(true);
                 this.update();
             }
+        },
+
+        minusLife: function (){
+            this.playSound(this.soundFx.HIT);
+            vibrate(200);
+
+            this.stop();
+            this.crashed = true;
+            this.distanceMeter.acheivement = false;
+
+            this.tRex.update(100, Trex.status.CRASHED);
+            this.runningTime = 0;
+            this.playing = true;
+            this.crashed = false;
+            this.distanceRan = 0;
+            this.setSpeed(this.config.SPEED);
+            this.time = getTimeStamp();
+            this.containerEl.classList.remove(Runner.classes.CRASHED);
+            this.clearCanvas();
+            this.horizon.reset();
+            this.tRex.reset();
+            this.playSound(this.soundFx.BUTTON_PRESS);
+            this.invert(true);
+            this.update();
         },
 
         /**
@@ -1148,6 +1212,57 @@
 
                     if (crashed) {
                         return [adjTrexBox, adjObstacleBox];
+                    }
+                }
+            }
+        }
+        return false;
+    };
+
+    function checkForCollisionObstacleAndBonus(obstacle, bonus, opt_canvasCtx) {
+        var obstacleBoxXPos = Runner.defaultDimensions.WIDTH + obstacle.xPos;
+
+        // Adjustments are made to the bounding box as there is a 1 pixel white
+        // border around the t-rex and obstacles.
+        var bonusBox = new CollisionBox(
+            bonus.xPos + 1,
+            bonus.yPos + 1,
+            bonus.typeConfig.width * bonus.size * 2,
+            bonus.typeConfig.height - 2);
+
+        var obstacleBox = new CollisionBox(
+            obstacle.xPos + 1,
+            obstacle.yPos + 1,
+            obstacle.typeConfig.width * obstacle.size - 2,
+            obstacle.typeConfig.height - 2);
+
+        // Debug outer box
+        if (opt_canvasCtx) {
+            drawCollisionBoxes(opt_canvasCtx, bonusBox, obstacleBox);
+        }
+
+        // Simple outer bounds check.
+        if (boxCompare(bonusBox, obstacleBox)) {
+            var collisionBoxes = obstacle.collisionBoxes;
+            var bonusCollisionBoxes = bonus.collisionBoxes;
+
+            // Detailed axis aligned box check.
+            for (var t = 0; t < bonusCollisionBoxes.length; t++) {
+                for (var i = 0; i < collisionBoxes.length; i++) {
+                    // Adjust the box to actual positions.
+                    var adjBonusBox =
+                        createAdjustedCollisionBox(bonusCollisionBoxes[t], bonusBox);
+                    var adjObstacleBox =
+                        createAdjustedCollisionBox(collisionBoxes[i], obstacleBox);
+                    var crashed = boxCompare(adjBonusBox, adjObstacleBox);
+
+                    // Draw boxes for debug.
+                    if (opt_canvasCtx) {
+                        drawCollisionBoxes(opt_canvasCtx, adjBonusBox, adjObstacleBox);
+                    }
+
+                    if (crashed) {
+                        return [adjBonusBox, adjObstacleBox];
                     }
                 }
             }
@@ -1479,20 +1594,20 @@
             frameRate: 1000 / 6,
             speedOffset: .8
         },
-        {
-            type: 'APPLE',
-            width: 25,
-            height: 25,
-            yPos: 105,
-            multipleSpeed: 4,
-            minGap: 120,
-            minSpeed: 0,
-            collisionBoxes: [
-                new CollisionBox(0, 7, 5, 27),
-                new CollisionBox(4, 0, 6, 34),
-                new CollisionBox(10, 4, 7, 14)
-            ]
-        }
+        // {
+        //     type: 'APPLE',
+        //     width: 25,
+        //     height: 25,
+        //     yPos: 105,
+        //     multipleSpeed: 4,
+        //     minGap: 120,
+        //     minSpeed: 0,
+        //     collisionBoxes: [
+        //         new CollisionBox(0, 7, 5, 27),
+        //         new CollisionBox(4, 0, 6, 34),
+        //         new CollisionBox(10, 4, 7, 14)
+        //     ]
+        // }
 
     ];
 
@@ -2288,6 +2403,371 @@
         }
     };
 
+    function LifeScore(canvas, spritePos, canvasWidth) {
+        this.canvas = canvas;
+        this.canvasCtx = canvas.getContext('2d');
+        this.image = Runner.imageSprite;
+        this.spritePos = spritePos;
+        this.x = -10;
+        this.y = 15;
+
+        this.currentDistance = 0;
+        this.maxScore = 0;
+        this.container = null;
+
+        this.digits = [];
+        this.defaultString = '';
+        this.invertTrigger = false;
+
+        this.config = LifeScore.config;
+        this.maxScoreUnits = this.config.MAX_DISTANCE_UNITS;
+        this.init(canvasWidth);
+    };
+
+
+    /**
+     * @enum {number}
+     */
+    LifeScore.dimensions = {
+        WIDTH: 10,
+        HEIGHT: 13,
+        DEST_WIDTH: 11
+    };
+
+
+    /**
+     * Y positioning of the digits in the sprite sheet.
+     * X position is always 0.
+     * @type {Array<number>}
+     */
+    LifeScore.yPos = [0, 13, 27, 40, 53, 67, 80, 93, 107, 120];
+
+
+    /**
+     * Distance meter config.
+     * @enum {number}
+     */
+    LifeScore.config = {
+        // Number of digits.
+        MAX_DISTANCE_UNITS: 3,
+
+    };
+
+
+    LifeScore.prototype = {
+        /**
+         * Initialise the distance meter to '00000'.
+         * @param {number} width Canvas width in px.
+         */
+        init: function (width) {
+            var maxDistanceStr = '';
+            this.defaultString = '0'
+            while(this.defaultString.length < this.config.MAX_DISTANCE_UNITS){
+                this.defaultString = '0' + this.defaultString;
+            }
+            this.calcXPos(width);
+            
+            this.maxScore = this.maxScoreUnits;
+            for (var i = 0; i < this.maxScoreUnits; i++) {
+                this.draw(i, parseInt(this.defaultString[i]));
+                maxDistanceStr += '9';
+            }
+
+            this.maxScore = parseInt(maxDistanceStr);
+        },
+
+        /**
+         * Calculate the xPos in the canvas.
+         * @param {number} canvasWidth
+         */
+        calcXPos: function (canvasWidth) {
+            this.x = canvasWidth - (LifeScore.dimensions.DEST_WIDTH *
+                (this.maxScoreUnits + 1));
+        },
+
+        /**
+         * Draw a digit to canvas.
+         * @param {number} digitPos Position of the digit.
+         * @param {number} value Digit value 0-9.
+         * @param {boolean} opt_highScore Whether drawing the high score.
+         */
+        draw: function (digitPos, value) {
+            var sourceWidth = LifeScore.dimensions.WIDTH;
+            var sourceHeight = LifeScore.dimensions.HEIGHT;
+            var sourceX = LifeScore.dimensions.WIDTH * value;
+            var sourceY = 0;
+
+            var targetX = digitPos * LifeScore.dimensions.DEST_WIDTH;
+            var targetY = this.y;
+            var targetWidth = LifeScore.dimensions.WIDTH;
+            var targetHeight = LifeScore.dimensions.HEIGHT;
+
+            // For high DPI we 2x source values.
+            if (IS_HIDPI) {
+                sourceWidth *= 2;
+                sourceHeight *= 2;
+                sourceX *= 2;
+            }
+
+            sourceX += this.spritePos.x;
+            sourceY += this.spritePos.y;
+
+            this.canvasCtx.save();
+
+ 
+            this.canvasCtx.translate(this.x, this.y);
+            
+
+            this.canvasCtx.drawImage(this.image, sourceX, sourceY,
+                sourceWidth, sourceHeight,
+                targetX, targetY,
+                targetWidth, targetHeight
+            );
+
+            this.canvasCtx.restore();
+        },
+
+        /**
+         * Covert pixel distance to a 'real' distance.
+         * @param {number} distance Pixel distance ran.
+         * @return {number} The 'real' distance ran.
+         */
+        getActualDistance: function (distance) {
+            return distance ? Math.round(distance * this.config.COEFFICIENT) : 0;
+        },
+
+        /**
+         * Update the distance meter.
+         * @param {number} distance
+         * @param {number} deltaTime
+         * @return {boolean} Whether the acheivement sound fx should be played.
+         */
+        update: function (distance) {
+            var paint = true;
+            var playSound = false;
+
+            if (!this.acheivement) {
+                // Score has gone beyond the initial digit count.
+                if (distance > this.maxScore && this.maxScoreUnits ==
+                    this.config.MAX_DISTANCE_UNITS) {
+                    this.maxScoreUnits++;
+                    this.maxScore = parseInt(this.maxScore + '9');
+                } else {
+                    this.distance = 0;
+                }
+
+                if (distance > 0) {
+                    // Create a string representation of the distance with leading 0.
+                    var distanceStr = (this.defaultString +
+                        distance).substr(-this.maxScoreUnits);
+                    this.digits = distanceStr.split('');
+                } else {
+                    this.digits = this.defaultString.split('');
+                }
+            } 
+
+            // Draw the digits if not flashing.
+            if (paint) {
+                for (var i = this.digits.length - 1; i >= 0; i--) {
+                    this.draw(i, parseInt(this.digits[i]));
+                }
+            }
+
+        },
+
+
+        /**
+         * Reset the distance meter back to '00000'.
+         */
+        reset: function () {
+            this.update(0);
+            this.acheivement = false;
+        }
+    };
+
+
+    function AppleScore(canvas, spritePos, canvasWidth) {
+        this.canvas = canvas;
+        this.canvasCtx = canvas.getContext('2d');
+        this.image = Runner.imageSprite;
+        this.spritePos = spritePos;
+        this.x = 0;
+        this.y = 30;
+
+        this.currentDistance = 0;
+        this.maxScore = 0;
+        this.container = null;
+
+        this.digits = [];
+        this.defaultString = '';
+        this.invertTrigger = false;
+
+        this.config = AppleScore.config;
+        this.maxScoreUnits = this.config.MAX_DISTANCE_UNITS;
+        this.init(canvasWidth);
+    };
+
+
+    /**
+     * @enum {number}
+     */
+    AppleScore.dimensions = {
+        WIDTH: 10,
+        HEIGHT: 13,
+        DEST_WIDTH: 11
+    };
+
+
+    /**
+     * Y positioning of the digits in the sprite sheet.
+     * X position is always 0.
+     * @type {Array<number>}
+     */
+    AppleScore.yPos = [0, 13, 27, 40, 53, 67, 80, 93, 107, 120];
+
+
+    /**
+     * Distance meter config.
+     * @enum {number}
+     */
+    AppleScore.config = {
+        // Number of digits.
+        MAX_DISTANCE_UNITS: 1,
+
+    };
+
+
+    AppleScore.prototype = {
+        /**
+         * Initialise the distance meter to '00000'.
+         * @param {number} width Canvas width in px.
+         */
+        init: function (width) {
+            var maxDistanceStr = '';
+            this.defaultString = '0'
+            while(this.defaultString.length < this.config.MAX_DISTANCE_UNITS){
+                this.defaultString = '0' + this.defaultString;
+            }
+            this.calcXPos(width);
+            
+            this.maxScore = this.maxScoreUnits;
+            for (var i = 0; i < this.maxScoreUnits; i++) {
+                this.draw(i, parseInt(this.defaultString[i]));
+                maxDistanceStr += '9';
+            }
+
+            this.maxScore = parseInt(maxDistanceStr);
+        },
+
+        /**
+         * Calculate the xPos in the canvas.
+         * @param {number} canvasWidth
+         */
+        calcXPos: function (canvasWidth) {
+            this.x = canvasWidth - (AppleScore.dimensions.DEST_WIDTH *
+                (this.maxScoreUnits + 1));
+        },
+
+        /**
+         * Draw a digit to canvas.
+         * @param {number} digitPos Position of the digit.
+         * @param {number} value Digit value 0-9.
+         * @param {boolean} opt_highScore Whether drawing the high score.
+         */
+        draw: function (digitPos, value) {
+            var sourceWidth = AppleScore.dimensions.WIDTH;
+            var sourceHeight = AppleScore.dimensions.HEIGHT;
+            var sourceX = AppleScore.dimensions.WIDTH * value;
+            var sourceY = 0;
+
+            var targetX = digitPos * AppleScore.dimensions.DEST_WIDTH;
+            var targetY = this.y;
+            var targetWidth = AppleScore.dimensions.WIDTH;
+            var targetHeight = AppleScore.dimensions.HEIGHT;
+
+            // For high DPI we 2x source values.
+            if (IS_HIDPI) {
+                sourceWidth *= 2;
+                sourceHeight *= 2;
+                sourceX *= 2;
+            }
+
+            sourceX += this.spritePos.x;
+            sourceY += this.spritePos.y;
+
+            this.canvasCtx.save();
+
+ 
+            this.canvasCtx.translate(this.x, this.y);
+            
+
+            this.canvasCtx.drawImage(this.image, sourceX, sourceY,
+                sourceWidth, sourceHeight,
+                targetX, targetY,
+                targetWidth, targetHeight
+            );
+
+            this.canvasCtx.restore();
+        },
+
+        /**
+         * Covert pixel distance to a 'real' distance.
+         * @param {number} distance Pixel distance ran.
+         * @return {number} The 'real' distance ran.
+         */
+        getActualDistance: function (distance) {
+            return distance ? Math.round(distance * this.config.COEFFICIENT) : 0;
+        },
+
+        /**
+         * Update the distance meter.
+         * @param {number} distance
+         * @param {number} deltaTime
+         * @return {boolean} Whether the acheivement sound fx should be played.
+         */
+        update: function (distance) {
+            var paint = true;
+            var playSound = false;
+
+            if (!this.acheivement) {
+                // Score has gone beyond the initial digit count.
+                if (distance > this.maxScore && this.maxScoreUnits ==
+                    this.config.MAX_DISTANCE_UNITS) {
+                    this.maxScoreUnits++;
+                    this.maxScore = parseInt(this.maxScore + '9');
+                } else {
+                    this.distance = 0;
+                }
+
+                if (distance > 0) {
+                    // Create a string representation of the distance with leading 0.
+                    var distanceStr = (this.defaultString +
+                        distance).substr(-this.maxScoreUnits);
+                    this.digits = distanceStr.split('');
+                } else {
+                    this.digits = this.defaultString.split('');
+                }
+            } 
+
+            // Draw the digits if not flashing.
+            if (paint) {
+                for (var i = this.digits.length - 1; i >= 0; i--) {
+                    this.draw(i, parseInt(this.digits[i]));
+                }
+            }
+
+        },
+
+
+        /**
+         * Reset the distance meter back to '00000'.
+         */
+        reset: function () {
+            this.update(0);
+            this.acheivement = false;
+        }
+    };
+
 
     //******************************************************************************
 
@@ -2739,14 +3219,17 @@
          *     ease in section.
          * @param {boolean} showNightMode Night mode activated.
          */
-        update: function (deltaTime, currentSpeed, updateObstacles, showNightMode) {
+        update: function (deltaTime, currentSpeed, updateObstacles,updateBonuses, showNightMode) {
             this.runningTime += deltaTime;
             this.horizonLine.update(deltaTime, currentSpeed);
             this.nightMode.update(showNightMode);
             this.updateClouds(deltaTime, currentSpeed);
-
+            var randomDig = getRandomNum(0,5)
             if (updateObstacles) {
                 this.updateObstacles(deltaTime, currentSpeed);
+            }
+            if(updateBonuses){
+                this.updateBonuses(deltaTime, currentSpeed)
             }
         },
 
@@ -2804,19 +3287,20 @@
 
             if (this.obstacles.length > 0) {
                 var lastObstacle = this.obstacles[this.obstacles.length - 1];
+                var lastBonus = this.bonuses[this.bonuses.length - 1];
 
                 if (lastObstacle && !lastObstacle.followingObstacleCreated &&
                     lastObstacle.isVisible() &&
                     (lastObstacle.xPos + lastObstacle.width + lastObstacle.gap) <
                     this.dimensions.WIDTH) {
                     this.addNewObstacle(currentSpeed);
-                    this.addNewBonus(currentSpeed);
+                   // this.addNewBonus(currentSpeed);
                     lastObstacle.followingObstacleCreated = true;
                 }
             } else {
                 // Create new obstacles.
                 this.addNewObstacle(currentSpeed);
-                this.addNewBonus(currentSpeed);
+              //  this.addNewBonus(currentSpeed);
 
             }
         },
@@ -2852,6 +3336,8 @@
                 }
             }
         },
+
+        
 
         /**
          * Returns whether the previous two obstacles are the same as the next one.
@@ -2896,27 +3382,58 @@
                 this.dimensions.WIDTH));
         },
 
+
+        updateBonuses: function (deltaTime, currentSpeed) {
+            // Obstacles, move to Horizon layer.
+            var updatedBonuses = this.bonuses.slice(0);
+
+            for (var i = 0; i < this.bonuses.length; i++) {
+                var bonus = this.bonuses[i];
+                bonus.update(deltaTime, currentSpeed);
+
+                // Clean up existing obstacles.
+                if (bonus.remove) {
+                    updatedBonuses.shift();
+                }
+            }
+            this.bonuses = updatedBonuses;
+            var lastObstacle = this.obstacles[this.obstacles.length - 1];
+
+            if (this.bonuses.length > 0) {
+                console.log("if");
+                var lastBonus = this.bonuses[this.bonuses.length - 1];
+                if (lastBonus && !lastBonus.followingBonusesCreated &&
+                    lastBonus.isVisible() &&
+                    (lastBonus.xPos + lastBonus.width + lastBonus.gap) <
+                    this.dimensions.WIDTH &&  (lastObstacle.xPos + lastObstacle.width + lastObstacle.gap) <
+                    this.dimensions.WIDTH) {
+                    this.addNewBonus(currentSpeed);
+                    lastObstacle.followingBonusesCreated = true;
+                }}
+             else {
+                console.log("else");
+                // Create new obstacles.
+                this.addNewBonus(currentSpeed);
+
+            }  
+        },
+
+
         addNewBonus: function (currentSpeed) {
-            var obstacleTypeIndex = 0
-            var obstacleType = Bonus.types[obstacleTypeIndex];
+            var bonusTypeIndex = 0
+            var bonusType = Bonus.types[bonusTypeIndex];
 
             // Check for multiples of the same type of obstacle.
             // Also check obstacle is available at current speed.
-            if (this.duplicateObstacleCheck(obstacleType.type) ||
-                currentSpeed < obstacleType.minSpeed) {
+            if (currentSpeed < bonusType.minSpeed) {
                 this.addNewBonus(currentSpeed);
             } else {
-                var obstacleSpritePos = this.spritePos[obstacleType.type];
+                var obstacleSpritePos = this.spritePos[bonusType.type];
 
-                this.obstacles.push(new Bonus(this.canvasCtx, obstacleType,
+                this.bonuses.push(new Bonus(this.canvasCtx, bonusType,
                     obstacleSpritePos, this.dimensions,
-                    this.gapCoefficient, currentSpeed, obstacleType.width));
+                    this.gapCoefficient, currentSpeed, bonusType.width));
 
-                this.obstacleHistory.unshift(obstacleType.type);
-
-                if (this.obstacleHistory.length > 1) {
-                    this.obstacleHistory.splice(Runner.config.MAX_OBSTACLE_DUPLICATION);
-                }
             }
         },
     };
